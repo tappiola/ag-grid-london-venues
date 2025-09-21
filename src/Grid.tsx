@@ -13,7 +13,7 @@ import {
 import { AgGridReact } from "ag-grid-react";
 
 import { VENUES2 } from "./data/venues.tsx";
-import { PersonFilter } from "./SetFilter.tsx";
+import { SetFilter } from "./SetFilter.tsx";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -88,7 +88,7 @@ export const Grid = () => {
         field: "zone.area.name",
         headerName: "Area",
         filter: {
-          component: PersonFilter,
+          component: SetFilter,
           doesFilterPass,
         },
       },
@@ -100,7 +100,7 @@ export const Grid = () => {
             .filter((t) => t.category === "CUISINE")
             .map((t) => t.name),
         filter: {
-          component: PersonFilter,
+          component: SetFilter,
           doesFilterPass: doesFilterPass2,
           filterParams: {}, // can stay empty
         },

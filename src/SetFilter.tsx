@@ -6,7 +6,7 @@ import type {
   ValueGetterParams,
 } from "ag-grid-community";
 
-export class PersonFilter implements FilterDisplay<unknown, unknown, string[]> {
+export class SetFilter implements FilterDisplay<unknown, unknown, string[]> {
   gui!: HTMLDivElement;
   eFilterText!: HTMLInputElement;
   private listEl!: HTMLDivElement;
@@ -107,15 +107,25 @@ export class PersonFilter implements FilterDisplay<unknown, unknown, string[]> {
     let values = collectUniverse();
     let availableSet = collectAvailable();
 
-    // ✅ Default: Select All checked (no model emitted so column isn't "filtered")
-    if (this.selected.size === 0 && values.length > 0) {
-      this.selected = new Set(values);
+    // ✅ Always seed from model
+    if (Array.isArray(params.model)) {
+      this.selected = new Set(params.model.map(String));
+    } else {
+      this.selected = new Set(values); // default: all selected
     }
 
     const emit = () => {
-      params.onModelChange(
-        this.selected.size ? Array.from(this.selected) : null,
-      );
+      const total = values.length;
+      const sel = this.selected.size;
+
+      if (sel === total) {
+        // all selected => no filter
+        params.onModelChange(null);
+      } else {
+        // none or some => explicit list ([] = filter none)
+        const ordered = values.filter((v) => this.selected.has(v));
+        params.onModelChange(ordered);
+      }
     };
 
     const updateSelectAllState = () => {
@@ -123,6 +133,7 @@ export class PersonFilter implements FilterDisplay<unknown, unknown, string[]> {
       const sel = this.selected.size;
       this.selectAllEl.checked = total > 0 && sel === total;
       this.selectAllEl.indeterminate = sel > 0 && sel < total;
+      console.log(this.selectAllEl.checked, this.selected.size);
     };
 
     const render = () => {
@@ -149,12 +160,14 @@ export class PersonFilter implements FilterDisplay<unknown, unknown, string[]> {
         cb.value = v;
         cb.checked = this.selected.has(v);
         cb.addEventListener("change", (e) => {
-          console.log(this, params);
-          console.log({ filtered, params: params.api.getDisplayedRowCount() });
           const input = e.currentTarget as HTMLInputElement;
-          input.checked ? this.selected.add(v) : this.selected.delete(v);
-          updateSelectAllState();
+          if (input.checked) {
+            this.selected.add(v);
+          } else {
+            this.selected.delete(v);
+          }
           emit();
+          updateSelectAllState();
         });
 
         const text = document.createElement("span");
@@ -178,39 +191,33 @@ export class PersonFilter implements FilterDisplay<unknown, unknown, string[]> {
     // Search input filters the visible list only
     this.eFilterText.addEventListener("input", render);
 
-    // Select All toggles the entire universe (not just visible)
     this.selectAllEl.addEventListener("change", () => {
       if (this.selectAllEl.checked) {
         this.selected = new Set(values);
       } else {
         this.selected.clear();
       }
-      render(); // redraw checks
+      render();
       emit();
     });
 
-    // Keep availability up to date as filters/sort change elsewhere
     const onModelUpdated = () => {
-      if (!fixedValues) values = collectUniverse();
+      if (!fixedValues) {
+        values = collectUniverse();
+      }
       availableSet = collectAvailable();
 
-      // ✅ If opening with no selection and data arrived now, default to Select All
-      if (
-        this.selected.size === 0 &&
-        values.length > 0 &&
-        (!params.model ||
-          (Array.isArray(params.model) && params.model.length === 0))
-      ) {
-        this.selected = new Set(values);
-      }
-
-      // Drop selections that no longer exist in the universe
+      const nextSelection = new Set<string>();
       this.selected.forEach((v) => {
-        if (!values.includes(v)) this.selected.delete(v);
+        if (values.includes(v)) {
+          nextSelection.add(v);
+        }
       });
 
+      this.selected = nextSelection;
       render();
     };
+
     params.api.addEventListener("modelUpdated", onModelUpdated);
     this.detachModelUpdated = () =>
       params.api.removeEventListener("modelUpdated", onModelUpdated);
@@ -218,9 +225,7 @@ export class PersonFilter implements FilterDisplay<unknown, unknown, string[]> {
     render();
   }
 
-  refresh(
-    _newParams: FilterDisplayParams<unknown, unknown, string[]>,
-  ): boolean {
+  refresh(): boolean {
     return true;
   }
 
@@ -238,3 +243,5 @@ export class PersonFilter implements FilterDisplay<unknown, unknown, string[]> {
     this.detachModelUpdated?.();
   }
 }
+
+export default SetFilter;
