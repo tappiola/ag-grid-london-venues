@@ -1,13 +1,27 @@
-import { useState } from "react";
+import { useMemo } from "react";
 
-import type { ColDef } from "ag-grid-community";
-import { AllCommunityModule, ModuleRegistry } from "ag-grid-community";
+import {
+  type ColDef,
+  ModuleRegistry,
+  AllCommunityModule,
+  themeQuartz,
+  type DoesFilterPassParams,
+  CustomFilterModule,
+  ClientSideRowModelModule,
+  ValidationModule,
+} from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
+
+import { VENUES2 } from "./data/venues.tsx";
+import { PersonFilter } from "./SetFilter.tsx";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-import { themeQuartz } from "ag-grid-community";
-import { VENUES2 } from "./data/venues.tsx";
+ModuleRegistry.registerModules([
+  CustomFilterModule,
+  ClientSideRowModelModule,
+  ...(process.env.NODE_ENV !== "production" ? [ValidationModule] : []),
+]);
 
 const myTheme = themeQuartz.withParams({
   accentColor: "#D78627",
@@ -28,42 +42,83 @@ const myTheme = themeQuartz.withParams({
 export type TagCategory = "OCCASION" | "MEAL_TYPE" | "CUISINE" | "VIBE";
 
 interface Tag {
-  id: number;
+  id: string;
   name: string;
   category: TagCategory;
 }
 
 interface IRow {
   name: string;
-  zone: { name: string; area: { name: string } };
-  price: number;
+  zone?: { name?: string; area?: { name?: string } };
+  price?: number;
   tags: Tag[];
 }
 
+const doesFilterPass = ({
+  model,
+  node,
+  handlerParams,
+}: DoesFilterPassParams<any, any, string[]>): boolean => {
+  const value = handlerParams.getValue(node);
+  if (!value) {
+    return false;
+  }
+
+  return model.includes(value);
+};
+
+const doesFilterPass2 = ({
+  model,
+  node,
+  handlerParams,
+}: DoesFilterPassParams<any, any, string[]>): boolean => {
+  const names = handlerParams.getValue(node);
+  return names.some((n) => (model ?? []).includes(n));
+};
+
 export const Grid = () => {
-  const [rowData] = useState<IRow[]>(VENUES2);
+  const rowData = useMemo<IRow[]>(() => VENUES2 as IRow[], []);
 
-  console.log(VENUES2.length);
+  const colDefs = useMemo<ColDef<IRow>[]>(
+    () => [
+      { field: "name" },
+      { field: "price" },
+      { field: "zone.name", headerName: "Zone" },
+      {
+        field: "zone.area.name",
+        headerName: "Area",
+        filter: {
+          component: PersonFilter,
+          doesFilterPass,
+        },
+      },
+      {
+        field: "tags",
+        headerName: "Cuisine",
+        valueGetter: ({ data }) =>
+          (data?.tags ?? [])
+            .filter((t) => t.category === "CUISINE")
+            .map((t) => t.name),
+        filter: {
+          component: PersonFilter,
+          doesFilterPass: doesFilterPass2,
+          filterParams: {}, // can stay empty
+        },
+        valueFormatter: ({ value }) =>
+          Array.isArray(value) ? value.join(", ") : "",
+      },
+    ],
+    [],
+  );
 
-  const [colDefs] = useState<ColDef<IRow>[]>([
-    { field: "name" },
-    { field: "price" },
-    { field: "zone.name" },
-    { field: "zone.area.name" },
-    {
-      field: "tags",
-      headerName: "Cuisine",
-      valueFormatter: ({ value }) =>
-        value
-          .filter((v: Tag) => v.category === "CUISINE")
-          .map((v: Tag) => v.name)
-          .join(", "),
-    },
-  ]);
-
-  const defaultColDef: ColDef = {
-    flex: 1,
-  };
+  const defaultColDef = useMemo<ColDef<IRow>>(
+    () => ({
+      flex: 1,
+      filter: true,
+      resizable: true,
+    }),
+    [],
+  );
 
   return (
     <div style={{ width: "100%", height: "100vh" }}>
@@ -73,7 +128,10 @@ export const Grid = () => {
         defaultColDef={defaultColDef}
         theme={myTheme}
         loadThemeGoogleFonts={true}
+        enableFilterHandlers={true}
       />
     </div>
   );
 };
+
+export default Grid;
