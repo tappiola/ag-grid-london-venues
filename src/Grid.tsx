@@ -110,7 +110,14 @@ export const Grid = () => {
           doesFilterPass,
         },
       },
-      { field: "zone.name", headerName: "Zone" },
+      {
+        field: "zone.name",
+        headerName: "Zone",
+        filter: {
+          component: SetFilter,
+          doesFilterPass,
+        },
+      },
       {
         field: "zone.area.name",
         headerName: "Area",
