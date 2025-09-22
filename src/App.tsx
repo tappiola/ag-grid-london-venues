@@ -1,11 +1,7 @@
 import { Grid } from "./Grid.tsx";
 
 function App() {
-  return (
-    <>
-      <Grid />
-    </>
-  );
+  return <Grid />;
 }
 
 export default App;

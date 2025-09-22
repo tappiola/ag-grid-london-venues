@@ -2,7 +2,7 @@ import type {
   FilterDisplay,
   FilterDisplayParams,
   IAfterGuiAttachedParams,
-  RowNode,
+  IRowNode,
   ValueGetterParams,
 } from "ag-grid-community";
 
@@ -32,88 +32,95 @@ export class SetFilter implements FilterDisplay<unknown, unknown, string[]> {
       <div id="valuesList" style="max-height:280px;overflow:auto;"></div>
     </div>`;
 
-    this.eFilterText = this.gui.querySelector(
-      "#filterText",
-    ) as HTMLInputElement;
-    this.listEl = this.gui.querySelector("#valuesList") as HTMLDivElement;
-    this.selectAllEl = this.gui.querySelector("#selectAll") as HTMLInputElement;
+    this.eFilterText = this.gui.querySelector<HTMLInputElement>("#filterText")!;
+    this.listEl = this.gui.querySelector<HTMLDivElement>("#valuesList")!;
+    this.selectAllEl = this.gui.querySelector<HTMLInputElement>("#selectAll")!;
 
-    const fp =
-      (params.colDef as any)?.filter?.filterParams ??
-      (params as any).filterParams ??
-      {};
-    const fixedValues: string[] | undefined = Array.isArray(fp.values)
-      ? fp.values.map(String)
-      : undefined;
+    type UnknownRecord = Record<string, unknown>;
 
-    const readCell = (node: RowNode): unknown => {
+    const getByPath = (obj: unknown, path?: string): unknown => {
+      if (!path) return undefined;
+      const segments = path.split(".");
+      let cur: unknown = obj;
+      for (const seg of segments) {
+        if (typeof cur !== "object" || cur === null) return undefined;
+        const rec = cur as UnknownRecord;
+        if (!Object.prototype.hasOwnProperty.call(rec, seg)) return undefined;
+        cur = rec[seg];
+      }
+      return cur;
+    };
+
+    const extractFixedValues = (): string[] | undefined => {
+      const v =
+        (params as { filterParams?: { values?: unknown } }).filterParams
+          ?.values ??
+        (params.colDef as { filter?: { filterParams?: { values?: unknown } } })
+          .filter?.filterParams?.values;
+
+      return Array.isArray(v) ? v.map(String) : undefined;
+    };
+
+    const fixedValues: string[] | undefined = extractFixedValues();
+
+    const readCell = (node: IRowNode<unknown>): unknown => {
       const colId = params.column.getColId();
 
-      const apiWithGet = params.api as unknown as {
-        getCellValue?: (p: { rowNode: RowNode; colKey: string }) => unknown;
+      type ApiWithGet = typeof params.api & {
+        getCellValue?: (p: {
+          rowNode: IRowNode<unknown>;
+          colKey: string;
+        }) => unknown;
       };
+      const apiWithGet = params.api as ApiWithGet;
+
       if (typeof apiWithGet.getCellValue === "function") {
         return apiWithGet.getCellValue({ rowNode: node, colKey: colId });
       }
 
-      const { colDef, columnApi, context, api } = params;
-      if (colDef.valueGetter) {
-        return (colDef.valueGetter as (p: ValueGetterParams) => unknown)({
+      const vg = params.colDef.valueGetter;
+
+      if (typeof vg === "function") {
+        const vgParams: ValueGetterParams = {
+          api: params.api,
+          column: params.column,
+          colDef: params.colDef,
+          context: params.context,
           data: node.data,
           node,
-          api,
-          column: params.column,
-          columnApi,
-          colDef,
-          context,
-          getValue: (field: string) =>
-            node.data ? (node.data as any)[field] : undefined,
-        } as ValueGetterParams);
+          getValue: (field: string) => getByPath(node.data, field),
+        };
+        return vg(vgParams);
       }
-      const field = colDef.field as string | undefined;
-      if (!field) return undefined;
-      return field
-        .split(".")
-        .reduce<any>((acc, k) => (acc == null ? acc : acc[k]), node.data);
+
+      return getByPath(node.data, params.colDef.field);
     };
 
-    // Universe of values (ALL rows, ignoring filters)
     const collectUniverse = (): string[] => {
       if (fixedValues) {
         return [...new Set(fixedValues)].sort((a, b) => a.localeCompare(b));
       }
       const set = new Set<string>();
-      params.api.forEachNode((node: RowNode) => {
+      params.api.forEachNode((node: IRowNode<unknown>) => {
         if (!node.data) return;
         const raw = readCell(node);
-        if (Array.isArray(raw)) for (const v of raw) set.add(String(v ?? ""));
-        else set.add(String(raw ?? ""));
+        if (Array.isArray(raw)) {
+          for (const v of raw) set.add(String(v ?? ""));
+        } else {
+          set.add(String(raw ?? ""));
+        }
       });
       return Array.from(set).sort((a, b) => a.localeCompare(b));
     };
 
-    // Available values under current filters/sort (for greying only)
-    // const collectAvailable = (): Set<string> => {
-    //   const set = new Set<string>();
-    //   params.api.forEachNodeAfterFilterAndSort((node: RowNode) => {
-    //     if (!node.data) return;
-    //     const raw = readCell(node);
-    //     if (Array.isArray(raw)) for (const v of raw) set.add(String(v ?? ""));
-    //     else set.add(String(raw ?? ""));
-    //   });
-    //   return set;
-    // };
-
     const collectAvailable = (): string[] => {
       const set = new Set<string>();
       const colId = params.column.getColId();
-      const model = params.api.getFilterModel();
+      const model = params.api.getFilterModel() as Record<string, unknown>;
 
-      // 1. Start from universe (so you always have all possible values)
       const universe = collectUniverse();
 
-      // 2. Collect values from rows after all filters
-      params.api.forEachNodeAfterFilter((node: RowNode) => {
+      params.api.forEachNodeAfterFilter((node: IRowNode<unknown>) => {
         if (!node.data) return;
         const raw = readCell(node);
         if (Array.isArray(raw)) {
@@ -123,11 +130,7 @@ export class SetFilter implements FilterDisplay<unknown, unknown, string[]> {
         }
       });
 
-      console.log({ set, model });
-
-      // 3. If this column is currently filtering, ignore its effect:
-      //    include full universe so options don't vanish
-      if (model[colId]) {
+      if (Object.prototype.hasOwnProperty.call(model, colId)) {
         return [...universe].sort((a, b) => a.localeCompare(b));
       }
 
@@ -137,11 +140,10 @@ export class SetFilter implements FilterDisplay<unknown, unknown, string[]> {
     let values = collectAvailable();
     let availableSet = collectAvailable();
 
-    // ✅ Always seed from model
     if (Array.isArray(params.model)) {
       this.selected = new Set(params.model.map(String));
     } else {
-      this.selected = new Set(values); // default: all selected
+      this.selected = new Set(values);
     }
 
     const emit = () => {
@@ -149,10 +151,8 @@ export class SetFilter implements FilterDisplay<unknown, unknown, string[]> {
       const sel = this.selected.size;
 
       if (sel === total) {
-        // all selected => no filter
         params.onModelChange(null);
       } else {
-        // none or some => explicit list ([] = filter none)
         const ordered = values.filter((v) => this.selected.has(v));
         params.onModelChange(ordered);
       }
@@ -163,7 +163,6 @@ export class SetFilter implements FilterDisplay<unknown, unknown, string[]> {
       const sel = this.selected.size;
       this.selectAllEl.checked = total > 0 && sel === total;
       this.selectAllEl.indeterminate = sel > 0 && sel < total;
-      console.log(this.selectAllEl.checked, this.selected.size);
     };
 
     const render = () => {
@@ -171,12 +170,6 @@ export class SetFilter implements FilterDisplay<unknown, unknown, string[]> {
       this.listEl.innerHTML = "";
 
       const filtered = availableSet.filter((v) => v.toLowerCase().includes(q));
-
-      console.log({
-        values,
-        filtered,
-        availableSet,
-      });
 
       for (const v of filtered) {
         const id = `pf_${params.column.getColId()}_${btoa(v).replace(/=+/g, "")}`;
@@ -227,6 +220,7 @@ export class SetFilter implements FilterDisplay<unknown, unknown, string[]> {
     // Search input filters the visible list only
     this.eFilterText.addEventListener("input", render);
 
+    // Select All toggles the entire universe (not just visible)
     this.selectAllEl.addEventListener("change", () => {
       if (this.selectAllEl.checked) {
         this.selected = new Set(values);

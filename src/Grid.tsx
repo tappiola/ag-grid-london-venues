@@ -2,22 +2,21 @@ import { useMemo } from "react";
 
 import {
   type ColDef,
+  type DoesFilterPassParams,
   ModuleRegistry,
   AllCommunityModule,
-  themeQuartz,
-  type DoesFilterPassParams,
   CustomFilterModule,
   ClientSideRowModelModule,
   ValidationModule,
+  themeQuartz,
 } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 
 import { VENUES2 } from "./data/venues.tsx";
-import { SetFilter } from "./SetFilter.tsx";
-
-ModuleRegistry.registerModules([AllCommunityModule]);
+import SetFilter from "./SetFilter.tsx";
 
 ModuleRegistry.registerModules([
+  AllCommunityModule,
   CustomFilterModule,
   ClientSideRowModelModule,
   ...(process.env.NODE_ENV !== "production" ? [ValidationModule] : []),
@@ -54,26 +53,41 @@ interface IRow {
   tags: Tag[];
 }
 
+const isStringArray = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((item) => typeof item === "string");
+
 const doesFilterPass = ({
   model,
   node,
   handlerParams,
-}: DoesFilterPassParams<any, any, string[]>): boolean => {
+}: DoesFilterPassParams<IRow, string | undefined, string[]>): boolean => {
+  if (!model || model.length === 0) {
+    return true;
+  }
+
   const value = handlerParams.getValue(node);
-  if (!value) {
+  if (typeof value !== "string") {
     return false;
   }
 
   return model.includes(value);
 };
 
-const doesFilterPass2 = ({
+const doesArrayFilterPass = ({
   model,
   node,
   handlerParams,
-}: DoesFilterPassParams<any, any, string[]>): boolean => {
-  const names = handlerParams.getValue(node);
-  return names.some((n) => (model ?? []).includes(n));
+}: DoesFilterPassParams<IRow, string[] | undefined, string[]>): boolean => {
+  if (!model || model.length === 0) {
+    return true;
+  }
+
+  const values = handlerParams.getValue(node);
+  if (!isStringArray(values)) {
+    return false;
+  }
+
+  return values.some((value) => model.includes(value));
 };
 
 export const Grid = () => {
@@ -101,7 +115,7 @@ export const Grid = () => {
             .map((t) => t.name),
         filter: {
           component: SetFilter,
-          doesFilterPass: doesFilterPass2,
+          doesFilterPass: doesArrayFilterPass,
         },
         valueFormatter: ({ value }) =>
           Array.isArray(value) ? value.join(", ") : "",
@@ -115,7 +129,7 @@ export const Grid = () => {
             .map((t) => t.name),
         filter: {
           component: SetFilter,
-          doesFilterPass: doesFilterPass2,
+          doesFilterPass: doesArrayFilterPass,
         },
         valueFormatter: ({ value }) =>
           Array.isArray(value) ? value.join(", ") : "",
@@ -129,7 +143,7 @@ export const Grid = () => {
             .map((t) => t.name),
         filter: {
           component: SetFilter,
-          doesFilterPass: doesFilterPass2,
+          doesFilterPass: doesArrayFilterPass,
         },
         valueFormatter: ({ value }) =>
           Array.isArray(value) ? value.join(", ") : "",
@@ -143,7 +157,7 @@ export const Grid = () => {
             .map((t) => t.name),
         filter: {
           component: SetFilter,
-          doesFilterPass: doesFilterPass2,
+          doesFilterPass: doesArrayFilterPass,
         },
         valueFormatter: ({ value }) =>
           Array.isArray(value) ? value.join(", ") : "",
