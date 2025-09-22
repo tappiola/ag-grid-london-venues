@@ -7,8 +7,8 @@ import {
   AllCommunityModule,
   CustomFilterModule,
   ClientSideRowModelModule,
-  ValidationModule,
   themeQuartz,
+  type ValueFormatterParams,
 } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 
@@ -19,7 +19,6 @@ ModuleRegistry.registerModules([
   AllCommunityModule,
   CustomFilterModule,
   ClientSideRowModelModule,
-  ...(process.env.NODE_ENV !== "production" ? [ValidationModule] : []),
 ]);
 
 const myTheme = themeQuartz.withParams({
@@ -61,16 +60,14 @@ const doesFilterPass = ({
   node,
   handlerParams,
 }: DoesFilterPassParams<IRow, string | undefined, string[]>): boolean => {
+  console.log({ model, node, handlerParams: handlerParams.getValue(node) });
   if (!model || model.length === 0) {
     return true;
   }
 
   const value = handlerParams.getValue(node);
-  if (typeof value !== "string") {
-    return false;
-  }
 
-  return model.includes(value);
+  return model.includes(value.toString());
 };
 
 const doesArrayFilterPass = ({
@@ -90,13 +87,29 @@ const doesArrayFilterPass = ({
   return values.some((value) => model.includes(value));
 };
 
+const starFormatter = (p: ValueFormatterParams): string => {
+  const raw = Number(p.value ?? 0);
+  const n = Math.max(0, Math.min(5, Math.trunc(raw)));
+  return "★".repeat(n);
+};
+
 export const Grid = () => {
   const rowData = useMemo<IRow[]>(() => VENUES2 as IRow[], []);
 
   const colDefs = useMemo<ColDef<IRow>[]>(
     () => [
       { field: "name" },
-      { field: "price" },
+      {
+        field: "price",
+        valueFormatter: starFormatter,
+        cellStyle: {
+          fontSize: "24px",
+        },
+        filter: {
+          component: SetFilter,
+          doesFilterPass,
+        },
+      },
       { field: "zone.name", headerName: "Zone" },
       {
         field: "zone.area.name",
