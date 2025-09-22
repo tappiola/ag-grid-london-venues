@@ -102,7 +102,48 @@ export const Grid = () => {
         filter: {
           component: SetFilter,
           doesFilterPass: doesFilterPass2,
-          filterParams: {}, // can stay empty
+        },
+        valueFormatter: ({ value }) =>
+          Array.isArray(value) ? value.join(", ") : "",
+      },
+      {
+        field: "tags",
+        headerName: "Occasion",
+        valueGetter: ({ data }) =>
+          (data?.tags ?? [])
+            .filter((t) => t.category === "OCCASION")
+            .map((t) => t.name),
+        filter: {
+          component: SetFilter,
+          doesFilterPass: doesFilterPass2,
+        },
+        valueFormatter: ({ value }) =>
+          Array.isArray(value) ? value.join(", ") : "",
+      },
+      {
+        field: "tags",
+        headerName: "Meal type",
+        valueGetter: ({ data }) =>
+          (data?.tags ?? [])
+            .filter((t) => t.category === "MEAL_TYPE")
+            .map((t) => t.name),
+        filter: {
+          component: SetFilter,
+          doesFilterPass: doesFilterPass2,
+        },
+        valueFormatter: ({ value }) =>
+          Array.isArray(value) ? value.join(", ") : "",
+      },
+      {
+        field: "tags",
+        headerName: "Vibe",
+        valueGetter: ({ data }) =>
+          (data?.tags ?? [])
+            .filter((t) => t.category === "VIBE")
+            .map((t) => t.name),
+        filter: {
+          component: SetFilter,
+          doesFilterPass: doesFilterPass2,
         },
         valueFormatter: ({ value }) =>
           Array.isArray(value) ? value.join(", ") : "",

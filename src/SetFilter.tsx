@@ -93,18 +93,48 @@ export class SetFilter implements FilterDisplay<unknown, unknown, string[]> {
     };
 
     // Available values under current filters/sort (for greying only)
-    const collectAvailable = (): Set<string> => {
+    // const collectAvailable = (): Set<string> => {
+    //   const set = new Set<string>();
+    //   params.api.forEachNodeAfterFilterAndSort((node: RowNode) => {
+    //     if (!node.data) return;
+    //     const raw = readCell(node);
+    //     if (Array.isArray(raw)) for (const v of raw) set.add(String(v ?? ""));
+    //     else set.add(String(raw ?? ""));
+    //   });
+    //   return set;
+    // };
+
+    const collectAvailable = (): string[] => {
       const set = new Set<string>();
-      params.api.forEachNodeAfterFilterAndSort((node: RowNode) => {
+      const colId = params.column.getColId();
+      const model = params.api.getFilterModel();
+
+      // 1. Start from universe (so you always have all possible values)
+      const universe = collectUniverse();
+
+      // 2. Collect values from rows after all filters
+      params.api.forEachNodeAfterFilter((node: RowNode) => {
         if (!node.data) return;
         const raw = readCell(node);
-        if (Array.isArray(raw)) for (const v of raw) set.add(String(v ?? ""));
-        else set.add(String(raw ?? ""));
+        if (Array.isArray(raw)) {
+          for (const v of raw) set.add(String(v ?? ""));
+        } else {
+          set.add(String(raw ?? ""));
+        }
       });
-      return set;
+
+      console.log({ set, model });
+
+      // 3. If this column is currently filtering, ignore its effect:
+      //    include full universe so options don't vanish
+      if (model[colId]) {
+        return [...universe].sort((a, b) => a.localeCompare(b));
+      }
+
+      return Array.from(set).sort((a, b) => a.localeCompare(b));
     };
 
-    let values = collectUniverse();
+    let values = collectAvailable();
     let availableSet = collectAvailable();
 
     // ✅ Always seed from model
@@ -140,11 +170,17 @@ export class SetFilter implements FilterDisplay<unknown, unknown, string[]> {
       const q = this.eFilterText.value.trim().toLowerCase();
       this.listEl.innerHTML = "";
 
-      const filtered = values.filter((v) => v.toLowerCase().includes(q));
+      const filtered = availableSet.filter((v) => v.toLowerCase().includes(q));
+
+      console.log({
+        values,
+        filtered,
+        availableSet,
+      });
 
       for (const v of filtered) {
         const id = `pf_${params.column.getColId()}_${btoa(v).replace(/=+/g, "")}`;
-        const isAvailable = availableSet.has(v);
+        const isAvailable = availableSet.includes(v);
 
         const label = document.createElement("label");
         label.htmlFor = id;
@@ -203,7 +239,7 @@ export class SetFilter implements FilterDisplay<unknown, unknown, string[]> {
 
     const onModelUpdated = () => {
       if (!fixedValues) {
-        values = collectUniverse();
+        values = collectAvailable();
       }
       availableSet = collectAvailable();
 
